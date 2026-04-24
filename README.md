@@ -12,8 +12,9 @@ It scans websites for phishing signals, suspicious domains, unsafe behavior patt
 - Detect phishing-style signals
 - Suspicious domain analysis
 - HTTPS security checks
-- Hidden iframe / redirect detection
-- Unsafe login page warnings
+- Hidden iframe detection
+- Redirect warnings
+- Unsafe login page alerts
 - Confidence labels (Trusted / Caution / Dangerous)
 - Scan history dashboard
 - Clean modern popup UI
@@ -22,51 +23,43 @@ It scans websites for phishing signals, suspicious domains, unsafe behavior patt
 
 ## Why SentinelX?
 
-Many unsafe websites look normal.
+Many risky websites look normal.
 
-SentinelX helps users make smarter browsing decisions in seconds.
+SentinelX helps users make safer browsing decisions in seconds.
 
 Use it before:
 
 - Logging in
-- Entering payment info
+- Entering payment details
 - Downloading files
 - Visiting unknown websites
 
 ---
 
+## Screenshots
+
+### Trusted Website Scan
+
+![Trusted Scan](Screenshots/Trusted.png)
+
+### Dangerous Website Scan
+
+![Dangerous Scan](Screenshots/Dangerous.png)
+
+### AI implementation
+
+![AI Insights](Screenshots/AI_Insights.png)
+
+### History
+
+![Recent Scans](Screenshots/Recent_Scans.png)
+---
+
 ## Installation (Developer Mode)
 
 1. Download or clone this repository
-2. Open Chrome and go to:
 
-chrome://extensions/
-
-3. Enable **Developer Mode**
-4. Click **Load unpacked**
-5. Select the SentinelX project folder
-
----
-
-## Privacy
-
-SentinelX is designed with privacy in mind.
-
-- No personal data sold
-- No password collection
-- Local browser-based scanning
-- Transparent permissions only
-
-See `privacy-policy.md`
-
----
-
-## Project Structure
+2. Open Chrome and visit:
 
 ```text
-manifest.json
-background.js
-contentScript.js
-popup/
-icons/
-privacy-policy.md
+chrome://extensions/
