@@ -1,3 +1,15 @@
+## Install SentinelX
+
+1. Download this repository as ZIP
+2. Extract files
+3. Open Chrome:
+chrome://extensions/
+4. Enable Developer Mode
+5. Click Load Unpacked
+6. Select SentinelX folder
+
+
+
 # SentinelX – Website Security Scanner
 
 SentinelX is a Chrome extension that helps users evaluate website safety before entering passwords, making payments, or downloading files.
