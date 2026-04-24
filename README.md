@@ -3,7 +3,7 @@
 1. Download this repository as ZIP
 2. Extract files
 3. Open Chrome:
-chrome://extensions/
+chrome://extensions/  or "Manage extensions"
 4. Enable Developer Mode
 5. Click Load Unpacked
 6. Select SentinelX folder
