@@ -13,9 +13,6 @@ chrome://extensions/  or "Manage extensions"
 # SentinelX – Website Security Scanner
 
 SentinelX is a Chrome extension that helps users evaluate website safety before entering passwords, making payments, or downloading files.
-
-It scans websites for phishing signals, suspicious domains, unsafe behavior patterns, redirects, insecure pages, and trust indicators.
-
 ---
 
 ## Features
@@ -67,11 +64,13 @@ Use it before:
 ![Recent Scans](Screenshots/Recent_Scans.png)
 ---
 
-## Installation (Developer Mode)
+## Built With
 
-1. Download or clone this repository
+- JavaScript
+- Chrome Extension Manifest V3
+- HTML/CSS
+- Heuristic Risk Engine
+- Optional AI Insights Backend
+---
 
-2. Open Chrome and visit:
-
-```text
-chrome://extensions/
+If you like this project, consider starring the repo ⭐
