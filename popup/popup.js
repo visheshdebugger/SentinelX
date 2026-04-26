@@ -177,7 +177,7 @@ Last Scanned: ${new Date().toLocaleTimeString()}
   }
 
   html += `
-<div class="ai-box"><strong>🤖 AI Insight</strong><br><br>Analyzing threats with SentinelX AI....</div>
+<div class="ai-box"><strong>🤖 AI Insights (Coming Soon)</strong><br><br>Analyzing threats with SentinelX AI....</div>
 <div class="reason-box"><strong>📘 Why This Score</strong><br><br>
 ${response.score >= 75 ? "✅ No critical threats detected<br>" : ""}
 ${response.findings.length ? `⚠ ${response.findings.length} risk signals found<br>` : ""}
@@ -201,7 +201,7 @@ async function fetchAI(response, html) {
   if (!aiToggle?.checked) {
     resultDiv.innerHTML = html.replace(
       "Analyzing threats with SentinelX AI....",
-      "AI Insights disabled by user.",
+      "AI Insights Beta is turned off.",
     );
     renderHistory();
     return;
@@ -233,7 +233,7 @@ async function fetchAI(response, html) {
   } catch {
     resultDiv.innerHTML = html.replace(
       "Analyzing threats with SentinelX AI....",
-      "AI server unavailable. Scan completed without AI insight.",
+      "AI Insights Beta is currently unavailable.<br><br>Core security scan completed successfully.",
     );
   }
 
