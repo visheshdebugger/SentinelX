@@ -1,5 +1,5 @@
 // SentinelX contentScript.js
-// FULL rebuild preserving important features + cleaned structure
+// Final Launch Calibrated Version
 
 console.log("SentinelX Scanner Active");
 
@@ -34,7 +34,6 @@ const protectedBrands = [
   "instagram",
   "netflix",
   "openai",
-  "pinterest",
   "youtube",
   "linkedin",
   "reddit",
@@ -48,6 +47,9 @@ function applyPenalty(score, amount) {
 function applyBonus(score, amount) {
   return score + Number(amount || 0);
 }
+function clamp(score) {
+  return Math.max(0, Math.min(100, score));
+}
 
 function normalizeDomain(text) {
   return text
@@ -60,57 +62,23 @@ function normalizeDomain(text) {
     .replace(/@/g, "a");
 }
 
-function scanPage(data) {
-  const findings = [];
-  if (data.scripts > 24)
-    findings.push({
-      text: "Too many scripts detected",
-      severity: "medium",
-      penalty: 8,
-    });
-  if (data.passwords > 0)
-    findings.push({
-      text: "Password field found",
-      severity: "medium",
-      penalty: 4,
-    });
-  if (data.passwords > 1)
-    findings.push({
-      text: "Multiple password fields found",
-      severity: "high",
-      penalty: 18,
-    });
-  if (data.forms === 0 && data.passwords > 0)
-    findings.push({
-      text: "Password field outside form",
-      severity: "high",
-      penalty: 20,
-    });
-  if (data.forms > 3)
-    findings.push({
-      text: "Multiple forms detected",
-      severity: "medium",
-      penalty: 8,
-    });
-  if (data.iframes > 5)
-    findings.push({
-      text: "Multiple iFrames found",
-      severity: "medium",
-      penalty: 10,
-    });
-  if (data.links > 260)
-    findings.push({
-      text: "Large number of links detected",
-      severity: "low",
-      penalty: 4,
-    });
-  return findings;
+function uniqueFindings(findings) {
+  const seen = new Set();
+  return findings.filter((item) => {
+    if (seen.has(item.text)) return false;
+    seen.add(item.text);
+    return true;
+  });
 }
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type !== "SCAN_PAGE") return;
 
   try {
+    const hostLower = location.hostname.replace(/^www\./, "").toLowerCase();
+    const normalizedHost = normalizeDomain(hostLower);
+    const isHttps = location.protocol === "https:";
+
     const data = {
       url: location.href,
       title: document.title || location.hostname,
@@ -123,8 +91,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       iframes: document.querySelectorAll("iframe").length,
     };
 
-    const hostLower = location.hostname.replace("www.", "").toLowerCase();
-    const normalizedHost = normalizeDomain(hostLower);
     const pageText = (
       document.body?.innerText ||
       document.documentElement?.innerText ||
@@ -132,199 +98,104 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     )
       .slice(0, 6000)
       .toLowerCase();
-    const isHttps = location.protocol === "https:";
+
+    let score = 92;
+    const findings = [];
 
     const isTrusted = trustedDomains.some((name) => hostLower.includes(name));
     const looksLikeBrand =
       !isTrusted && protectedBrands.some((name) => hostLower.includes(name));
-    const typoBrandMatch =
+    const typoBrand =
       !isTrusted &&
       protectedBrands.some(
         (name) => normalizedHost.includes(name) && !hostLower.includes(name),
       );
 
-    const isEcommerce = /add to cart|buy now|checkout|wishlist/.test(pageText);
-
-    const isMediaSite = /watch now|listen now|stream|video|music/.test(
-      pageText,
-    );
-
-    const isDeveloperSite = /repository|documentation|api|developer|code/.test(
-      pageText,
-    );
-
-    const isBankingSite =
-      /bank|wallet|upi|credit card|debit card|net banking|payment/.test(
-        pageText,
-      );
-
-    const isSocialSite = /followers|friends|messages|timeline|profile/.test(
-      pageText,
-    );
-
-    const isNewsBlogSite =
-      /article|latest news|editorial|blog post|breaking news/.test(pageText);
-
-    const isKnownCategory =
-      isEcommerce ||
-      isMediaSite ||
-      isDeveloperSite ||
-      isBankingSite ||
-      isSocialSite ||
-      isNewsBlogSite;
-    const isUnknownSite = !isTrusted && !isKnownCategory;
-    const isModernHeavySite = data.scripts > 20 && data.links > 100 && isHttps;
-
-    const suspiciousWords = [
-      "free download",
-      "watch free",
-      "stream free",
-      "mod apk",
-      "crack",
-      "casino",
-      "xxx",
-      "18+",
-      "no signup",
-    ];
-    const suspiciousHits = suspiciousWords.filter((word) =>
-      pageText.includes(word),
+    const suspiciousHits = (
+      pageText.match(
+        /free download|watch free|stream free|casino|xxx|mod apk|crack/g,
+      ) || []
     ).length;
 
-    const hasLongDomain = hostLower.length > 28;
-    const hasManyNumbers = (hostLower.match(/[0-9]/g) || []).length >= 4;
-    const hasManyHyphens = (hostLower.match(/-/g) || []).length >= 2;
     const hasSuspiciousTld = suspiciousTlds.some((tld) =>
       hostLower.endsWith(tld),
     );
-    const hasCheapWords = /deal|offer|free|gift|bonus|win|cheap|discount/.test(
+    const hasLongDomain = hostLower.length > 28;
+    const hasManyNumbers = (hostLower.match(/[0-9]/g) || []).length >= 4;
+    const hasManyHyphens = (hostLower.match(/-/g) || []).length >= 2;
+
+    // Domain only piracy detector (fixed false positives)
+    const isPiracyStyle = /hdhub|torrent|1337x|yts|rarbg|fmovies/.test(
       hostLower,
     );
 
-    const randomWordDomain = /[a-z]{12,}/.test(
-      hostLower.replace(/[-0-9.]/g, ""),
-    );
-
-    const fakeStorePattern =
-      /shop|store|mall|sale/.test(hostLower) && !isEcommerce;
-
-    let findings = scanPage(data);
-    let score = 92;
-
-    // Baseline boosts
     if (isTrusted) score = applyBonus(score, 6);
-
-    if (isEcommerce) score = applyBonus(score, 5);
-
-    if (isMediaSite) score = applyBonus(score, 3);
-
-    if (isDeveloperSite) score = applyBonus(score, 5);
-
-    if (isBankingSite) score = applyBonus(score, 2);
-
-    if (isSocialSite) score = applyBonus(score, 2);
-
-    if (isNewsBlogSite) score = applyBonus(score, 2);
-    if (isUnknownSite && isHttps && suspiciousHits === 0)
-      score = applyBonus(score, 6);
-
-    // Reduce false positives on modern sites
-    if (isModernHeavySite) {
-      findings = findings.filter(
-        (item) =>
-          item.text !== "Too many scripts detected" &&
-          item.text !== "Large number of links detected",
-      );
-    }
-
-    // Core risk checks
-    if (!isHttps) {
-      findings.push({ text: "Website not using HTTPS", severity: "high" });
+    if (isHttps) score = applyBonus(score, 4);
+    else {
       score = applyPenalty(score, 25);
-    }
-    if (isBankingSite && !isTrusted) {
-      findings.push({
-        text: "Untrusted banking-style website detected",
-        severity: "high",
-      });
-
-      score = applyPenalty(score, 28);
+      findings.push({ text: "Website not using HTTPS", severity: "high" });
     }
 
     if (!isHttps && data.passwords > 0) {
+      score = applyPenalty(score, 30);
       findings.push({
         text: "Password form on insecure page",
         severity: "high",
       });
-      score = applyPenalty(score, 30);
     }
+
     if (looksLikeBrand) {
-      findings.push({ text: "Domain imitates known brand", severity: "high" });
       score = applyPenalty(score, 22);
+      findings.push({ text: "Domain imitates known brand", severity: "high" });
     }
-    if (typoBrandMatch) {
+
+    if (typoBrand) {
+      score = applyPenalty(score, 28);
       findings.push({
         text: "Typosquatting brand imitation domain detected",
         severity: "high",
       });
-      score = applyPenalty(score, 28);
     }
-    if (suspiciousHits >= 2) {
-      findings.push({
-        text: "Risky content keywords detected",
-        severity: "medium",
-      });
-      score = applyPenalty(score, 18);
-    }
+
     if (hasSuspiciousTld) {
+      score = applyPenalty(score, 12);
       findings.push({
         text: "Suspicious domain ending detected",
         severity: "medium",
       });
-      score = applyPenalty(score, 12);
     }
+
     if (hasLongDomain) {
+      score = applyPenalty(score, 6);
       findings.push({ text: "Unusually long domain name", severity: "low" });
-      score = applyPenalty(score, 6);
     }
+
     if (hasManyNumbers) {
-      findings.push({
-        text: "Unusual amount of numbers in domain",
-        severity: "medium",
-      });
       score = applyPenalty(score, 10);
+      findings.push({ text: "Too many numbers in domain", severity: "medium" });
     }
+
     if (hasManyHyphens) {
-      findings.push({ text: "Multiple hyphens in domain", severity: "low" });
-      score = applyPenalty(score, 6);
+      score = applyPenalty(score, 8);
+      findings.push({ text: "Multiple hyphens in domain", severity: "medium" });
     }
-    if (hasCheapWords) {
+
+    if (suspiciousHits >= 2) {
+      score = applyPenalty(score, 18);
       findings.push({
-        text: "Spam-style promotional domain wording",
+        text: "Risky content keywords detected",
         severity: "medium",
       });
-
-      score = applyPenalty(score, 10);
     }
 
-    if (randomWordDomain && !isTrusted) {
+    if (isPiracyStyle) {
+      score = Math.min(score, 40);
       findings.push({
-        text: "Low reputation random-looking domain",
-        severity: "medium",
-      });
-
-      score = applyPenalty(score, 12);
-    }
-
-    if (fakeStorePattern) {
-      findings.push({
-        text: "Fake-store style domain pattern",
+        text: "Piracy / suspicious download style site detected",
         severity: "high",
       });
-
-      score = applyPenalty(score, 18);
     }
 
-    // Hidden iframe check
     document.querySelectorAll("iframe").forEach((frame) => {
       try {
         const style = getComputedStyle(frame);
@@ -334,143 +205,79 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           frame.width == 0 ||
           frame.height == 0
         ) {
+          score = applyPenalty(score, 10);
           findings.push({ text: "Hidden iframe detected", severity: "medium" });
-          score = applyPenalty(score, 12);
         }
-      } catch (e) {}
+      } catch (error) {}
     });
 
-    // Redirect checks
-    const metaRedirect = document.querySelector('meta[http-equiv="refresh"]');
-    const urlLower = location.href.toLowerCase();
-    const hasRedirectParam = /redirect=|url=|next=|target=/.test(urlLower);
-    if (metaRedirect) {
+    if (document.querySelector('meta[http-equiv="refresh"]')) {
+      score = applyPenalty(score, 12);
       findings.push({
         text: "Automatic page redirect detected",
         severity: "medium",
       });
-      score = applyPenalty(score, 14);
     }
-    if (hasRedirectParam && !isTrusted) {
+
+    if (
+      /redirect=|url=|next=|target=/.test(location.href.toLowerCase()) &&
+      !isTrusted
+    ) {
+      score = applyPenalty(score, 10);
       findings.push({
         text: "Suspicious redirect URL pattern detected",
         severity: "medium",
       });
-      score = applyPenalty(score, 10);
     }
 
-    // Findings penalties
-    findings.forEach((item) => {
-      let penalty = Number(item.penalty || 0);
+    const finalFindings = uniqueFindings(findings);
 
-      if (item.severity === "high") penalty += 10;
-      if (item.severity === "medium") penalty += 4;
-      if (item.severity === "low") penalty += 1;
+    // Launch calibration bands
+    if (isTrusted) {
+      score = Math.max(score, 82);
+      score = Math.min(score, 98);
+    } else {
+      score = Math.min(score, 90);
+    }
 
-      // Dangerous keywords deserve more weight
-      if (
+    // Free gaming / ad-heavy sites should not appear elite trust
+    if (
+      /games|play|arcade|freegames|html5/.test(hostLower + pageText) &&
+      !isTrusted
+    ) {
+      score = Math.min(score, 82);
+    }
+
+    score = clamp(score);
+
+    const criticalRisk = finalFindings.some(
+      (item) =>
         item.text.includes("Typosquatting") ||
-        item.text.includes("banking-style") ||
+        item.text.includes("Domain imitates known brand") ||
         item.text.includes("Password form on insecure") ||
-        item.text.includes("Domain imitates known brand")
-      ) {
-        penalty += 8;
-      }
+        item.text.includes("Piracy"),
+    );
 
-      score = applyPenalty(score, penalty);
-    });
-
-    // Cleanup duplicate findings
-    const seen = new Set();
-    findings = findings.filter((item) => {
-      if (seen.has(item.text)) return false;
-      seen.add(item.text);
-      return true;
-    });
-
-    // Stable scoring recovery patch
-    const isPiracyStyle = /hdhub|torrent|movies|apk/.test(hostLower);
-
-    if (isTrusted && !severeRisk && suspiciousHits === 0) {
-      score = applyBonus(score, 4);
-    }
-    if (hostLower.includes("google") && score < 88) score = 88;
-    if (hostLower.includes("amazon") && score < 88) score = 88;
-    if (hostLower.includes("myntra") && score < 88) score = 88;
-    if (hostLower.includes("meesho") && score < 84) score = 84;
-    if (hostLower.includes("github") && score < 86) score = 86;
-    if (hostLower.includes("reddit") && score < 82) score = 82;
-
-    if (isPiracyStyle && score > 45) score = 45;
-
-    // Clamp score
-    if (Number.isNaN(score)) score = 50;
-
-    /* Stability Engine */
-    const stableFloor = isTrusted ? 80 : 35;
-    const stableCeiling = isTrusted ? 98 : 96;
-
-    score = Math.max(stableFloor, Math.min(stableCeiling, score));
-
-    // Trusted precision patch
-    if (hostLower.includes("google") && score > 98) score = 98;
-    if (hostLower.includes("amazon") && score > 96) score = 96;
-    if (hostLower.includes("myntra") && score > 95) score = 95;
-    if (hostLower.includes("github") && score > 97) score = 97;
-    if (hostLower.includes("reddit") && score > 94) score = 94;
-
-    // Confidence engine
-    const severeRisk = findings.some((item) => item.severity === "high");
-    const mediumRiskCombo =
-      findings.filter((item) => item.severity === "medium").length >= 3;
-
-    if (mediumRiskCombo) {
-      score = applyPenalty(score, 8);
-    }
-
-    const mediumRiskCount = findings.filter(
+    const mediumCount = finalFindings.filter(
       (item) => item.severity === "medium",
     ).length;
 
     let confidenceLabel = "Caution";
     let confidenceEmoji = "⚠";
 
-    if (
-      score >= 78 &&
-      !severeRisk &&
-      !mediumRiskCombo &&
-      mediumRiskCount <= 2
-    ) {
+    if (score >= 78 && !criticalRisk && mediumCount <= 2) {
       confidenceLabel = "Trusted";
       confidenceEmoji = "✅";
-    } else if (score < 50 || severeRisk) {
+    } else if (score < 50 || criticalRisk) {
       confidenceLabel = "Dangerous";
       confidenceEmoji = "🚨";
     }
 
-    /* Rescan smoothing */
-    const storageKey = "sentinelx_last_" + hostLower;
-
-    chrome.storage.local.get([storageKey], (dataStore) => {
-      const oldScore = dataStore[storageKey];
-
-      if (typeof oldScore === "number") {
-        score = Math.round((oldScore + score) / 2);
-      }
-
-      chrome.storage.local.set({
-        [storageKey]: score,
-      });
-
-      chrome.runtime.sendMessage({
-        type: "UPDATE_BADGE",
-        score,
-      });
-    });
+    chrome.runtime.sendMessage({ type: "UPDATE_BADGE", score });
 
     sendResponse({
       ...data,
-      findings,
+      findings: finalFindings,
       score,
       confidenceLabel,
       confidenceEmoji,
@@ -488,7 +295,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
-// Quick badge update on load
 window.addEventListener("load", () => {
   setTimeout(() => {
     let quickScore = location.protocol === "https:" ? 85 : 65;
@@ -496,32 +302,34 @@ window.addEventListener("load", () => {
       quickScore -= 10;
     if (document.querySelectorAll("iframe").length > 3) quickScore -= 8;
     if (document.querySelectorAll("script").length > 20) quickScore -= 8;
-    quickScore = Math.max(0, Math.min(100, quickScore));
-    chrome.runtime.sendMessage({ type: "UPDATE_BADGE", score: quickScore });
+    chrome.runtime.sendMessage({
+      type: "UPDATE_BADGE",
+      score: clamp(quickScore),
+    });
   }, 1500);
 });
 
-// Password warning popup restored
 document.addEventListener("focusin", (event) => {
   const target = event.target;
   if (target.tagName === "INPUT" && target.type === "password") {
     if (location.protocol !== "https:") {
       if (document.getElementById("sentinelxWarn")) return;
-
       const banner = document.createElement("div");
       banner.id = "sentinelxWarn";
       banner.innerText = "⚠ SentinelX: This page may be unsafe for passwords.";
-      banner.style.position = "fixed";
-      banner.style.top = "15px";
-      banner.style.right = "15px";
-      banner.style.zIndex = "999999";
-      banner.style.background = "#ff3b30";
-      banner.style.color = "white";
-      banner.style.padding = "12px 16px";
-      banner.style.borderRadius = "12px";
-      banner.style.fontSize = "14px";
-      banner.style.fontWeight = "600";
-      banner.style.boxShadow = "0 6px 18px rgba(0,0,0,0.25)";
+      Object.assign(banner.style, {
+        position: "fixed",
+        top: "15px",
+        right: "15px",
+        zIndex: "999999",
+        background: "#ff3b30",
+        color: "white",
+        padding: "12px 16px",
+        borderRadius: "12px",
+        fontSize: "14px",
+        fontWeight: "600",
+        boxShadow: "0 6px 18px rgba(0,0,0,0.25)",
+      });
       document.body.appendChild(banner);
       setTimeout(() => banner.remove(), 5000);
     }
